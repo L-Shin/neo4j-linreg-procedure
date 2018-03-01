@@ -71,7 +71,7 @@ public class LinearRegression {
             Node curr = knownNodes.next();
             Object x = curr.getProperty(indVar);
             Object y = curr.getProperty(depVar);
-            // TODO: 3/1/18 deal with error messages if properties are not numbers
+            // TODO: 3/1/18 deal with error if properties are not numbers
             if (x instanceof Number && y instanceof Number) {
                 R.addData((double) x, (double) y);
             }
@@ -83,7 +83,7 @@ public class LinearRegression {
         while (unknownNodes.hasNext()) {
             Node curr = unknownNodes.next();
             Object x = curr.getProperty(indVar);
-            // TODO: 3/1/18 deal with error messages if properties are not numbers
+            // TODO: 3/1/18 deal with error if properties are not numbers
             if (x instanceof Number) {
                 curr.setProperty(newVarName, R.predict((double) x));
             }
