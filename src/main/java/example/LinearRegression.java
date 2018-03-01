@@ -33,7 +33,7 @@ public class LinearRegression {
 
 
     @UserFunction
-    @Description("example.predict(b, m, x) - sets the regression parameters as intercept = b, coefficient = m, " +
+    @Description("example.predict(b, m, x) - uses the regression parameters intercept = b, coefficient = m, " +
             "and returns a predicted y value based on the equation y = m * x + b")
     public Double predict(@Name("intercept") Double intercept, @Name("slope") Double slope, @Name("input")
             Double input) {
@@ -63,6 +63,7 @@ public class LinearRegression {
         parameters.put("label", label);
         parameters.put("indVar", indVar);
         parameters.put("depVar", depVar);
+        //build the model using indVar and depVar data from nodes with label
         Result resultKnown = db.execute("MATCH (node:$label) WHERE exists(node.$indVar) AND exists(node.$depVar) RETURN node",
                 parameters);
         ResourceIterator<Node> knownNodes = resultKnown.columnAs("node");
@@ -70,16 +71,19 @@ public class LinearRegression {
             Node curr = knownNodes.next();
             Object x = curr.getProperty(indVar);
             Object y = curr.getProperty(depVar);
+            // TODO: 3/1/18 deal with error messages if properties are not numbers
             if (x instanceof Number && y instanceof Number) {
                 R.addData((double) x, (double) y);
             }
 
         }
+        //predict depVar values
         Result resultUnknown = db.execute("MATCH (node:$label) WHERE exists(node.$indVar) AND NOT exists(node.$depVar) RETURN node", parameters);
         ResourceIterator<Node> unknownNodes = resultUnknown.columnAs("node");
         while (unknownNodes.hasNext()) {
             Node curr = unknownNodes.next();
             Object x = curr.getProperty(indVar);
+            // TODO: 3/1/18 deal with error messages if properties are not numbers
             if (x instanceof Number) {
                 curr.setProperty(newVarName, R.predict((double) x));
             }
