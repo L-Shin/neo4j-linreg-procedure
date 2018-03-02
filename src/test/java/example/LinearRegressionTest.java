@@ -46,7 +46,7 @@ public class LinearRegressionTest {
             session.run("CREATE (node {time:4})");
             session.run("CREATE (node {time:5})");
             session.run("CALL example.simpleRegression(['node'], ['time'], ['progress'], ['predictedProgress'])");
-            StatementResult result = session.run("MATCH (n:node) WHERE exists(n.predictedProgress) RETURN n.time AS time, n.predictedProgress AS predictedProgress");
+            StatementResult result = session.run("MATCH (n:node) WHERE exists(n.predictedProgress) RETURN n.time, n.predictedProgress");
 
             SimpleRegression R = new SimpleRegression();
             R.addData(1.0, 1.345);

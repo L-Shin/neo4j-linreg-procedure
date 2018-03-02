@@ -10,7 +10,6 @@ import org.neo4j.procedure.*;
 import org.apache.commons.math3.stat.regression.SimpleRegression;
 
 
-import static org.neo4j.helpers.collection.MapUtil.stringMap;
 
 /** In this class I will create two implementations
  * of a linear regression model.
@@ -50,25 +49,48 @@ public class LinearRegression {
     @Context
     public Log log;
 
-
-    @Procedure(value = "example.simpleRegression", mode = Mode.WRITE)
-    @Description("create a linear regression model using independent and dependent property data from nodes that have" +
+    //single variable linear regression using node or relationship properties
+    @Procedure(value = "example.simpleNodeRegression", mode = Mode.WRITE)
+    @Description("create a linear regression model using independent and dependent property data from nodes/relationships that have" +
             " the given label and contain both properties. Then store predicted values under the property name " +
-            "'newVarName' for nodes with the same label and known x but no known y property value")
+            "'newVarName' for nodes/relationships with the same label and known x but no known y property value. " +
+            "Store the linear regression coefficients in a new LinReg node. Use of nodes vs relationships specified with dataSource")
 
     public void simpleRegression(@Name("label") String label, @Name("indpendent variable") String indVar,
-                                 @Name("dependent variable") String depVar, @Name("new variable name") String newVarName) {
-        SimpleRegression R = new SimpleRegression();
+                                 @Name("dependent variable") String depVar, @Name("new variable name") String newVarName,
+                                 @Name("data source") String dataSource) {
+
+        if (!(dataSource.equals("node")||dataSource.equals("relationship"))) {
+            //error
+        }
+
         Map<String, Object> parameters = new HashMap<>();
         parameters.put("label", label);
         parameters.put("indVar", indVar);
         parameters.put("depVar", depVar);
+
         //build the model using indVar and depVar data from nodes with label
-        Result resultKnown = db.execute("MATCH (node:$label) WHERE exists(node.$indVar) AND exists(node.$depVar) RETURN node",
-                parameters);
-        ResourceIterator<Node> knownNodes = resultKnown.columnAs("node");
-        while (knownNodes.hasNext()) {
-            Node curr = knownNodes.next();
+        Result resultKnown;
+
+        Result resultUnknown;
+
+        if (dataSource.equals("node")) {
+            resultKnown = db.execute("MATCH (node:$label) WHERE exists(node.$indVar) AND exists(node.$depVar) " +
+                    "RETURN node", parameters);
+            resultUnknown = db.execute("MATCH (node:$label) WHERE exists(node.$indVar) AND NOT exists(node.$depVar) RETURN node", parameters);
+
+        } else  {
+            resultKnown = db.execute("MATCH () - [r:$label] - () WHERE exists(r.$indVar) AND exists(r.$depVar)" +
+                            "RETURN r AS relationship", parameters);
+            resultUnknown = db.execute("MATCH () - [r:$label] - () WHERE exists(r.$indVar AND NOT exists(r.$depVar)" +
+                    "RETURN r AS relationship", parameters);
+        }
+
+        ResourceIterator<Entity> knownValues = resultKnown.columnAs(dataSource);
+        SimpleRegression R = new SimpleRegression();
+
+        while (knownValues.hasNext()) {
+            Entity curr = knownValues.next();
             Object x = curr.getProperty(indVar);
             Object y = curr.getProperty(depVar);
             // TODO: 3/1/18 deal with error if properties are not numbers
@@ -78,19 +100,24 @@ public class LinearRegression {
 
         }
         //predict depVar values
-        Result resultUnknown = db.execute("MATCH (node:$label) WHERE exists(node.$indVar) AND NOT exists(node.$depVar) RETURN node", parameters);
-        ResourceIterator<Node> unknownNodes = resultUnknown.columnAs("node");
-        while (unknownNodes.hasNext()) {
-            Node curr = unknownNodes.next();
+
+        ResourceIterator<Entity> unknownValues = resultUnknown.columnAs(dataSource);
+        while (unknownValues.hasNext()) {
+            Entity curr = unknownValues.next();
             Object x = curr.getProperty(indVar);
             // TODO: 3/1/18 deal with error if properties are not numbers
             if (x instanceof Number) {
                 curr.setProperty(newVarName, R.predict((double) x));
             }
-
         }
+        parameters.put("int", R.getIntercept());
+        parameters.put("slope", R.getSlope());
+
+        db.execute("CREATE (n:LinReg {nodeLabel:$label, indVar:$indVar, depVar:$depVar, intercept:$int, slope:$slope})", parameters);
 
     }
+
+
 }
 
 
