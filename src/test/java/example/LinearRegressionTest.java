@@ -17,7 +17,8 @@ public class LinearRegressionTest {
     // Start a Neo4j instance
     @Rule
     public Neo4jRule neo4j = new Neo4jRule()
-            .withFunction(LinearRegression.class);
+            .withFunction(LinearRegression.class)
+            .withProcedure(LinearRegression.class);
 
     @Test
     public void shouldPredictValues() throws Throwable {
@@ -45,7 +46,7 @@ public class LinearRegressionTest {
             session.run("CREATE (node {time:3, progress:3.259})");
             session.run("CREATE (node {time:4})");
             session.run("CREATE (node {time:5})");
-            session.run("CALL example.simpleRegression(['node'], ['time'], ['progress'], ['predictedProgress'])");
+            session.run("CALL example.simpleRegression('node', 'time', 'progress', 'predictedProgress', 'node')");
             StatementResult result = session.run("MATCH (n:node) WHERE exists(n.predictedProgress) RETURN n.time, n.predictedProgress");
 
             SimpleRegression R = new SimpleRegression();
