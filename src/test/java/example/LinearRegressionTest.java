@@ -36,7 +36,7 @@ public class LinearRegressionTest {
     }
 
     @Test
-    public void shouldCreateLinearRegression() throws Throwable {
+    public void shouldCreateNodeRegression() throws Throwable {
         try (Driver driver = GraphDatabase.driver(neo4j.boltURI(), Config.build().withEncryptionLevel(Config.EncryptionLevel.NONE).toConfig())) {
             Session session = driver.session();
 
@@ -66,7 +66,34 @@ public class LinearRegressionTest {
 
 
 
-            // TODO: 2/22/18 add test for procedure which creates nodes of same label, some with two float properties and some with only one. Check slope, intercept, and new calculated property values
+
+        }
+    }
+    @Test
+    public void shouldCreateRelRegression() throws Throwable {
+        try (Driver driver = GraphDatabase.driver(neo4j.boltURI(), Config.build().withEncryptionLevel(Config.EncryptionLevel.NONE).toConfig())) {
+            Session session = driver.session();
+
+            session.run("CREATE (:Node {id:1}) - [:WORKS_FOR {time:1, progress:1.345}] -> " +
+                    "(:Node {id:2}) - [:WORKS_FOR {time:2, progress:2.596}] -> " +
+                    "(:Node {id:3}) - [:WORKS_FOR {time:3, progress:3.259}] -> (:Node {id:4})");
+            session.run("CREATE (:Node {id:5}) -[:WORKS_FOR {time:4}] -> (:Node {id:6}) - [:WORKS_FOR {time:5}] -> (:Node {id:7})");
+            session.run("CALL example.simpleRegression('WORKS_FOR', 'time', 'progress', 'predictedProgress', 'relationship')");
+            StatementResult result = session.run("MATCH () - [r:WORKS_FOR] - () WHERE exists(r.predictedProgress) RETURN r.time, r.predictedProgress");
+
+            SimpleRegression R = new SimpleRegression();
+            R.addData(1.0, 1.345);
+            R.addData(2.0, 2.596);
+            R.addData(3.0, 3.259);
+
+            HashMap<Double, Double> expected = new HashMap<>();
+            expected.put(4.0, R.predict(4));
+            expected.put(5.0, R.predict(5));
+
+            while (result.hasNext()) {
+                Record actual = result.next();
+                assertEquals(expected.get(actual.get("time").asDouble()), (Double) actual.get("predictedProgress").asDouble());
+            }
         }
     }
 }
