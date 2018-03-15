@@ -50,13 +50,13 @@ public class LinearRegression {
     public Log log;
 
     //single variable linear regression using node or relationship properties
-    @Procedure(value = "example.simpleNodeRegression", mode = Mode.WRITE)
+    @Procedure(value = "example.simpleRegression", mode = Mode.WRITE)
     @Description("create a linear regression model using independent and dependent property data from nodes/relationships that have" +
             " the given label and contain both properties. Then store predicted values under the property name " +
             "'newVarName' for nodes/relationships with the same label and known x but no known y property value. " +
             "Store the linear regression coefficients in a new LinReg node. Use of nodes vs relationships specified with dataSource")
 
-    public void simpleRegression(@Name("label") String label, @Name("indpendent variable") String indVar,
+    public void simpleRegression(@Name("label") String label, @Name("independent variable") String indVar,
                                  @Name("dependent variable") String depVar, @Name("new variable name") String newVarName,
                                  @Name("data source") String dataSource) {
 
@@ -75,11 +75,12 @@ public class LinearRegression {
         Result resultUnknown;
 
         if (dataSource.equals("node")) {
-            resultKnown = db.execute("MATCH (node:$label) WHERE exists(node.$indVar) AND exists(node.$depVar) " +
+            resultKnown = db.execute("MATCH (node) WHERE $label IN labels(node) AND $indVar IN keys(node) AND $depVar IN keys(node) " +
                     "RETURN node", parameters);
-            resultUnknown = db.execute("MATCH (node:$label) WHERE exists(node.$indVar) AND NOT exists(node.$depVar) RETURN node", parameters);
+            resultUnknown = db.execute("MATCH (node) WHERE $label IN labels(node) AND $indVar IN keys(node) AND NOT $depVar IN keys(node) RETURN node", parameters);
 
         } else  {
+            // FIXME: labels cannot be parameterized, see Cypher query above for fix
             resultKnown = db.execute("MATCH () - [r:$label] - () WHERE exists(r.$indVar) AND exists(r.$depVar)" +
                             "RETURN r AS relationship", parameters);
             resultUnknown = db.execute("MATCH () - [r:$label] - () WHERE exists(r.$indVar AND NOT exists(r.$depVar)" +
