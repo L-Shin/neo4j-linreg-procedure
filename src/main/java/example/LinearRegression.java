@@ -62,7 +62,7 @@ public class LinearRegression {
                                  @Name("data source") String dataSource) {
 
         if (!(dataSource.equals("node")||dataSource.equals("relationship"))) {
-            // TODO: error
+            // TODO: ERROR
         }
 
         Map<String, Object> parameters = new HashMap<>();
@@ -70,9 +70,9 @@ public class LinearRegression {
         parameters.put("indVar", indVar);
         parameters.put("depVar", depVar);
 
-        //build the model using indVar and depVar data from nodes with label
+        //gathers points with known indVar and depVar
         Result resultKnown;
-
+        //gathers points with known indVar but no known depVar
         Result resultUnknown;
 
         if (dataSource.equals("node")) {
@@ -91,6 +91,7 @@ public class LinearRegression {
         ResourceIterator<Entity> knownValues = resultKnown.columnAs(dataSource);
         SimpleRegression R = new SimpleRegression();
 
+        //build the model
         while (knownValues.hasNext()) {
             Entity curr = knownValues.next();
             Object x = curr.getProperty(indVar);
@@ -101,8 +102,8 @@ public class LinearRegression {
             }
 
         }
-        //predict depVar values
 
+        //predict depVar values
         ResourceIterator<Entity> unknownValues = resultUnknown.columnAs(dataSource);
         while (unknownValues.hasNext()) {
             Entity curr = unknownValues.next();
@@ -115,7 +116,7 @@ public class LinearRegression {
         parameters.put("int", R.getIntercept());
         parameters.put("slope", R.getSlope());
 
-        db.execute("CREATE (n:LinReg {nodeLabel:$label, indVar:$indVar, depVar:$depVar, intercept:$int, slope:$slope})", parameters);
+        db.execute("CREATE (n:LinReg {label:$label, indVar:$indVar, depVar:$depVar, intercept:$int, slope:$slope})", parameters);
 
     }
 

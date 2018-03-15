@@ -41,13 +41,13 @@ public class LinearRegressionTest {
             Session session = driver.session();
 
 
-            session.run("CREATE (node {time:1.0, progress:1.345})");
-            session.run("CREATE (node {time:2.0, progress:2.596})");
-            session.run("CREATE (node {time:3.0, progress:3.259})");
-            session.run("CREATE (node {time:4.0})");
-            session.run("CREATE (node {time:5.0})");
+            session.run("CREATE (:node {time:1.0, progress:1.345})");
+            session.run("CREATE (:node {time:2.0, progress:2.596})");
+            session.run("CREATE (:node {time:3.0, progress:3.259})");
+            session.run("CREATE (:node {time:4.0})");
+            session.run("CREATE (:node {time:5.0})");
             session.run("CALL example.simpleRegression('node', 'time', 'progress', 'predictedProgress', 'node')");
-            StatementResult result = session.run("MATCH (n:node) WHERE exists(n.predictedProgress) RETURN n.time, n.predictedProgress");
+            StatementResult result = session.run("MATCH (n:node) WHERE exists(n.predictedProgress) RETURN n.time as time, n.predictedProgress as predictedProgress");
 
             SimpleRegression R = new SimpleRegression();
             R.addData(1.0, 1.345);
@@ -69,7 +69,10 @@ public class LinearRegressionTest {
                 assertThat(actualPrediction, equalTo(expectedPrediction));
             }
 
+            Record model = session.run("MATCH (n:LinReg {label:'node', indVar:'time', depVar:'progress'}) RETURN n.intercept as intercept, n.slope as slope").single();
 
+            assertEquals(model.get("intercept").asDouble(), R.getIntercept(), 0.00000000000001);
+            assertEquals(model.get("slope").asDouble(), R.getSlope(), 0.00000000000001);
 
 
         }
@@ -106,6 +109,10 @@ public class LinearRegressionTest {
 
 
             }
+            Record model = session.run("MATCH (n:LinReg {label:'WORKS_FOR', indVar:'time', depVar:'progress'}) RETURN n.intercept as intercept, n.slope as slope").single();
+
+            assertEquals(model.get("intercept").asDouble(), R.getIntercept(), 0.00000000000001);
+            assertEquals(model.get("slope").asDouble(), R.getSlope(), 0.00000000000001);
         }
     }
 }
