@@ -3,7 +3,7 @@ package example;
 import java.util.HashMap;
 import java.util.Map;
 
-import com.sun.xml.internal.bind.v2.TODO;
+
 import org.neo4j.graphdb.*;
 import org.neo4j.logging.Log;
 import org.neo4j.procedure.*;
@@ -77,15 +77,15 @@ public class LinearRegression {
 
         if (dataSource.equals("node")) {
             resultKnown = db.execute("MATCH (node) WHERE $label IN labels(node) AND $indVar IN keys(node) AND $depVar IN keys(node) " +
-                    "RETURN node", parameters);
-            resultUnknown = db.execute("MATCH (node) WHERE $label IN labels(node) AND $indVar IN keys(node) AND NOT $depVar IN keys(node) RETURN node", parameters);
+                    "RETURN DISTINCT node", parameters);
+            resultUnknown = db.execute("MATCH (node) WHERE $label IN labels(node) AND $indVar IN keys(node) AND NOT $depVar IN keys(node) RETURN DISTINCT node", parameters);
 
         } else  {
-            // FIXME: labels cannot be parameterized, see Cypher query above for fix
+
             resultKnown = db.execute("MATCH () - [r] - () WHERE type(r) = $label AND $indVar IN keys(r) AND $depVar IN keys(r)" +
-                            "RETURN r AS relationship", parameters);
+                            "RETURN DISTINCT r AS relationship", parameters);
             resultUnknown = db.execute("MATCH () - [r] - () WHERE type(r) = $label AND $indVar IN keys(r) AND NOT $depVar IN keys(r)" +
-                    "RETURN r AS relationship", parameters);
+                    "RETURN DISTINCT r as relationship", parameters);
         }
 
         ResourceIterator<Entity> knownValues = resultKnown.columnAs(dataSource);
