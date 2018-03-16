@@ -12,21 +12,21 @@ import org.apache.commons.math3.stat.regression.SimpleRegression;
 
 
 
-/** In this class I will create two implementations
+/** In this class I will create three implementations
  * of a linear regression model.
  *
  * 1. Create a user defined function in which the user manually inputs
  * the slope/intercept coefficients obtained through a third
- * party data analysis, and then can call this function on the graph
+ * party data analysis tool, and then calls this function on the graph
  * to predict unknown values.
  *
  * 2. Create a user defined procedure in which the user specifies which
- * node type and what properties will be the independent and dependent values
+ * node/relationship type and properties of that entity will be the independent and dependent values
  * of the regression. The procedure will then create a linear regression
- * model using all nodes with known x and y values and map that model onto all nodes
+ * model using all entities with known x and y values and map that model onto all entities
  * with known x but unknown y values, storing the predicted y value as another
- * property. The linear regression model will be stored as an isolated node so that
- * it can be updated as more known data is added to the graph.
+ * property. The linear slope and intercept of the regression model will be stored as an isolated node so that
+ * it can be later applied as more data is added to the graph.
  */
 
 public class LinearRegression {
@@ -62,7 +62,7 @@ public class LinearRegression {
                                  @Name("data source") String dataSource) {
 
         if (!(dataSource.equals("node")||dataSource.equals("relationship"))) {
-            // TODO: ERROR
+             throw new RuntimeException("Invalid dataSource (acceptable values are 'node' or 'relationship')");
         }
 
         Map<String, Object> parameters = new HashMap<>();
@@ -96,11 +96,15 @@ public class LinearRegression {
             Entity curr = knownValues.next();
             Object x = curr.getProperty(indVar);
             Object y = curr.getProperty(depVar);
-            // TODO: 3/1/18 deal with error if properties are not numbers
+
             if (x instanceof Number && y instanceof Number) {
                 R.addData((double) x, (double) y);
             }
 
+        }
+
+        if (R.getN() < 2) {
+            throw new RuntimeException("not enough known values to create a model");
         }
 
         //predict depVar values
@@ -108,7 +112,7 @@ public class LinearRegression {
         while (unknownValues.hasNext()) {
             Entity curr = unknownValues.next();
             Object x = curr.getProperty(indVar);
-            // TODO: 3/1/18 deal with error if properties are not numbers
+
             if (x instanceof Number) {
                 curr.setProperty(newVarName, R.predict((double) x));
             }
@@ -131,16 +135,40 @@ public class LinearRegression {
     public void customRegression(@Name("model query") String modelQuery, @Name("map query") String mapQuery,
                                  @Name("independent variable") String indVar, @Name("dependent variable") String depVar,
                                  @Name("new variable name") String newVarName) {
+        Result knownValues;
 
-        Result knownValues = db.execute(modelQuery);
+        try
+        {
+            knownValues = db.execute(modelQuery);
+        }
+        catch (QueryExecutionException q)
+        {
+            throw new RuntimeException("model query is invalid");
+        }
+
         SimpleRegression R = new SimpleRegression();
+        if (!(knownValues.columns().contains(indVar)&&knownValues.columns().contains(depVar))) {
+            throw new RuntimeException("model query returns data with invalid column titles-must match indVar and depVar");
+        }
         while(knownValues.hasNext()) {
             Map<String, Object> row = knownValues.next();
             R.addData((double) row.get(indVar), (double) row.get(depVar));
         }
+        if (R.getN()<2) {
+            throw new RuntimeException("not enough data to create a model");
+        }
+        Result r;
+        String columnTitle;
+        try
+        {
+            r = db.execute(mapQuery);
+            columnTitle = r.columns().get(0);
+        }
+        catch (QueryExecutionException q)
+        {
+            throw new RuntimeException("map query is invalid");
+        }
 
-        Result r = db.execute(mapQuery);
-        String columnTitle = r.columns().get(0);
         ResourceIterator<Entity> unknowns = r.columnAs(columnTitle);
 
         while(unknowns.hasNext()) {
