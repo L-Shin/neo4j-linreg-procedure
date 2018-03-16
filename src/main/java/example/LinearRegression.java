@@ -120,7 +120,45 @@ public class LinearRegression {
 
     }
 
+    /* modelQuery must return a Result that contains a column titled indVar and a column titled depVar. This data will be used
+    to create the model. mapQuery must return a single column result of type Entity (node or relationship). If entries in this
+    column contain the property indVar and not the property depVar, the predicted depVar value will be stored under the property
+    named newVarName
+     */
+    @Procedure(value = "example.customRegression", mode = Mode.WRITE)
+    @Description("Create a linear regression model using the the two data points which result from running the modelQuery." +
+            "Then store predicted values on the Entities that result from running the mapQuery.")
+    public void customRegression(@Name("model query") String modelQuery, @Name("map query") String mapQuery,
+                                 @Name("independent variable") String indVar, @Name("dependent variable") String depVar,
+                                 @Name("new variable name") String newVarName) {
 
+        Result knownValues = db.execute(modelQuery);
+        SimpleRegression R = new SimpleRegression();
+        while(knownValues.hasNext()) {
+            Map<String, Object> row = knownValues.next();
+            R.addData((double) row.get(indVar), (double) row.get(depVar));
+        }
+
+        Result r = db.execute(mapQuery);
+        String columnTitle = r.columns().get(0);
+        ResourceIterator<Entity> unknowns = r.columnAs(columnTitle);
+
+        while(unknowns.hasNext()) {
+            Entity e = unknowns.next();
+            if (e.hasProperty(indVar) && !e.hasProperty(depVar)) {
+                e.setProperty(newVarName, R.predict((double) e.getProperty(indVar)));
+            }
+
+        }
+        Map<String, Object> parameters = new HashMap<>();
+        parameters.put("indVar", indVar);
+        parameters.put("depVar", depVar);
+        parameters.put("int", R.getIntercept());
+        parameters.put("slope", R.getSlope());
+
+        db.execute("CREATE (:LinReg:Custom {indVar:$indVar, depVar:$depVar, intercept:$int, slope:$slope})", parameters);
+
+    }
 }
 
 

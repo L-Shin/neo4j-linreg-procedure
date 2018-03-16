@@ -1,7 +1,8 @@
 package example;
-
+import java.util.HashMap;
 import org.junit.Rule;
 import org.junit.Test;
+import org.neo4j.cypher.internal.frontend.v2_3.ast.functions.Has;
 import org.neo4j.driver.v1.*;
 import org.neo4j.harness.junit.Neo4jRule;
 
@@ -10,9 +11,10 @@ import static org.hamcrest.CoreMatchers.equalTo;
 
 import org.apache.commons.math3.stat.regression.SimpleRegression;
 
-import java.util.HashMap;
+import java.util.Optional;
 
 public class LinearRegressionTest {
+
 
     // Start a Neo4j instance
     @Rule
@@ -35,17 +37,15 @@ public class LinearRegressionTest {
         }
     }
 
+
     @Test
     public void shouldCreateNodeRegression() throws Throwable {
         try (Driver driver = GraphDatabase.driver(neo4j.boltURI(), Config.build().withEncryptionLevel(Config.EncryptionLevel.NONE).toConfig())) {
             Session session = driver.session();
 
 
-            session.run("CREATE (:node {time:1.0, progress:1.345})");
-            session.run("CREATE (:node {time:2.0, progress:2.596})");
-            session.run("CREATE (:node {time:3.0, progress:3.259})");
-            session.run("CREATE (:node {time:4.0})");
-            session.run("CREATE (:node {time:5.0})");
+            session.run("CREATE (:node {time:1.0, progress:1.345}), (:node {time:2.0, progress:2.596}), " +
+                    "(:node {time:3.0, progress:3.259}), (:node {time:4.0}), (:node {time:5.0})");
             session.run("CALL example.simpleRegression('node', 'time', 'progress', 'predictedProgress', 'node')");
             StatementResult result = session.run("MATCH (n:node) WHERE exists(n.predictedProgress) RETURN n.time as time, n.predictedProgress as predictedProgress");
 
@@ -77,17 +77,25 @@ public class LinearRegressionTest {
 
         }
     }
+
+    private static String createKnownRelationships = "CREATE (:Node {id:1}) - [:WORKS_FOR {time:1.0, progress:1.345}] -> " +
+            "(:Node {id:2}) - [:WORKS_FOR {time:2.0, progress:2.596}] -> " +
+            "(:Node {id:3}) - [:WORKS_FOR {time:3.0, progress:3.259}] -> (:Node {id:4})";
+
+    private static String createUnknownRelationships = "CREATE (:Node {id:5}) -[:WORKS_FOR {time:4.0}] -> " +
+            "(:Node {id:6}) - [:WORKS_FOR {time:5.0}] -> (:Node {id:7})";
+
+    private static String gatherPredictedValues = "MATCH () - [r:WORKS_FOR] - () WHERE exists(r.time) AND " +
+            "exists(r.predictedProgress) RETURN r.time as time, r.predictedProgress as predictedProgress";
     @Test
     public void shouldCreateRelRegression() throws Throwable {
         try (Driver driver = GraphDatabase.driver(neo4j.boltURI(), Config.build().withEncryptionLevel(Config.EncryptionLevel.NONE).toConfig())) {
             Session session = driver.session();
 
-            session.run("CREATE (:Node {id:1}) - [:WORKS_FOR {time:1.0, progress:1.345}] -> " +
-                    "(:Node {id:2}) - [:WORKS_FOR {time:2.0, progress:2.596}] -> " +
-                    "(:Node {id:3}) - [:WORKS_FOR {time:3.0, progress:3.259}] -> (:Node {id:4})");
-            session.run("CREATE (:Node {id:5}) -[:WORKS_FOR {time:4.0}] -> (:Node {id:6}) - [:WORKS_FOR {time:5.0}] -> (:Node {id:7})");
+            session.run(createKnownRelationships);
+            session.run(createUnknownRelationships);
             session.run("CALL example.simpleRegression('WORKS_FOR', 'time', 'progress', 'predictedProgress', 'relationship')");
-            StatementResult result = session.run("MATCH () - [r:WORKS_FOR] - () WHERE exists(r.time) AND exists(r.predictedProgress) RETURN r.time as time, r.predictedProgress as predictedProgress");
+            StatementResult result = session.run(gatherPredictedValues);
 
             SimpleRegression R = new SimpleRegression();
             R.addData(1.0, 1.345);
@@ -110,6 +118,51 @@ public class LinearRegressionTest {
 
             }
             Record model = session.run("MATCH (n:LinReg {label:'WORKS_FOR', indVar:'time', depVar:'progress'}) RETURN n.intercept as intercept, n.slope as slope").single();
+
+            assertEquals(model.get("intercept").asDouble(), R.getIntercept(), 0.00000000000001);
+            assertEquals(model.get("slope").asDouble(), R.getSlope(), 0.00000000000001);
+        }
+    }
+
+    @Test
+    public void shouldCreateCustomRegression() throws Throwable {
+        try (Driver driver = GraphDatabase.driver(neo4j.boltURI(), Config.build().withEncryptionLevel(Config.EncryptionLevel.NONE).toConfig())) {
+            Session session = driver.session();
+            session.run(createKnownRelationships);
+            session.run(createUnknownRelationships);
+
+
+            String modelQuery = "MATCH () - [r:WORKS_FOR] - () WHERE exists(r.time) AND exists(r.progress) RETURN r.time as time, r.progress as progress";
+            String mapQuery = "MATCH () - [r:WORKS_FOR] - () WHERE exists(r.time) AND NOT exists(r.progress) RETURN r";
+            HashMap<String, Object> parameters = new HashMap<>();
+            parameters.put("modelQuery", modelQuery);
+            parameters.put("mapQuery", mapQuery);
+
+            session.run("CALL example.customRegression($modelQuery, $mapQuery, 'time', 'progress', 'predictedProgress')", parameters);
+
+            StatementResult result = session.run(gatherPredictedValues);
+
+            SimpleRegression R = new SimpleRegression();
+            R.addData(1.0, 1.345);
+            R.addData(2.0, 2.596);
+            R.addData(3.0, 3.259);
+
+            HashMap<Double, Double> expected = new HashMap<>();
+            expected.put(4.0, R.predict(4.0));
+            expected.put(5.0, R.predict(5.0));
+
+            while (result.hasNext()) {
+                Record actual = result.next();
+
+                double time = actual.get("time").asDouble();
+                double expectedPrediction = expected.get(time);
+                double actualPrediction = actual.get("predictedProgress").asDouble();
+
+                assertThat( actualPrediction, equalTo( expectedPrediction ) );
+
+
+            }
+            Record model = session.run("MATCH (n:LinReg:Custom {indVar:'time', depVar:'progress'}) RETURN n.intercept as intercept, n.slope as slope").single();
 
             assertEquals(model.get("intercept").asDouble(), R.getIntercept(), 0.00000000000001);
             assertEquals(model.get("slope").asDouble(), R.getSlope(), 0.00000000000001);
