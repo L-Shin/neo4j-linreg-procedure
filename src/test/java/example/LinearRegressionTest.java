@@ -5,6 +5,7 @@ import org.junit.Test;
 import org.neo4j.cypher.internal.frontend.v2_3.ast.functions.Has;
 import org.neo4j.driver.v1.*;
 import org.neo4j.harness.junit.Neo4jRule;
+import java.io.*;
 
 import static org.junit.Assert.*;
 import static org.hamcrest.CoreMatchers.equalTo;
@@ -69,10 +70,23 @@ public class LinearRegressionTest {
                 assertThat(actualPrediction, equalTo(expectedPrediction));
             }
 
-            Record model = session.run("MATCH (n:LinReg {label:'node', indVar:'time', depVar:'progress'}) RETURN n.intercept as intercept, n.slope as slope").single();
+            Record model = session.run("MATCH (n:LinReg {label:'node', indVar:'time', depVar:'progress'}) " +
+                    "WHERE exists(n.serializedModel) RETURN n.intercept as intercept, n.slope as slope, n.serializedModel as serializedModel").single();
 
             assertEquals(model.get("intercept").asDouble(), R.getIntercept(), 0.00000000000001);
             assertEquals(model.get("slope").asDouble(), R.getSlope(), 0.00000000000001);
+
+
+            try (ByteArrayInputStream serializedModel = new ByteArrayInputStream(model.get("serializedModel").asByteArray());
+                ObjectInput in = new ObjectInputStream(serializedModel)){
+
+                SimpleRegression o = (SimpleRegression) in.readObject();
+                assertEquals(model.get("intercept").asDouble(), o.getIntercept(), 0.00000000000001);
+                assertEquals(model.get("slope").asDouble(), o.getSlope(), 0.00000000000001);
+
+            } catch (IOException e) {
+                fail("error in deserialization");
+            }
 
 
         }
@@ -117,10 +131,23 @@ public class LinearRegressionTest {
 
 
             }
-            Record model = session.run("MATCH (n:LinReg {label:'WORKS_FOR', indVar:'time', depVar:'progress'}) RETURN n.intercept as intercept, n.slope as slope").single();
+            Record model = session.run("MATCH (n:LinReg {label:'WORKS_FOR', indVar:'time', depVar:'progress'}) " +
+                    "WHERE exists(n.serializedModel) RETURN n.intercept as intercept, n.slope as slope, n.serializedModel as serializedModel").single();
 
             assertEquals(model.get("intercept").asDouble(), R.getIntercept(), 0.00000000000001);
             assertEquals(model.get("slope").asDouble(), R.getSlope(), 0.00000000000001);
+
+            try (ByteArrayInputStream serializedModel = new ByteArrayInputStream(model.get("serializedModel").asByteArray());
+                 ObjectInput in = new ObjectInputStream(serializedModel)){
+
+                SimpleRegression o = (SimpleRegression) in.readObject();
+                assertEquals(model.get("intercept").asDouble(), o.getIntercept(), 0.00000000000001);
+                assertEquals(model.get("slope").asDouble(), o.getSlope(), 0.00000000000001);
+
+            } catch (IOException e) {
+                fail("error in deserialization");
+            }
+
         }
     }
 
@@ -162,10 +189,22 @@ public class LinearRegressionTest {
 
 
             }
-            Record model = session.run("MATCH (n:LinReg:Custom {indVar:'time', depVar:'progress'}) RETURN n.intercept as intercept, n.slope as slope").single();
+            Record model = session.run("MATCH (n:LinReg:Custom {indVar:'time', depVar:'progress'}) " +
+                    "WHERE exists(n.serializedModel) RETURN n.intercept as intercept, n.slope as slope, n.serializedModel as serializedModel").single();
 
             assertEquals(model.get("intercept").asDouble(), R.getIntercept(), 0.00000000000001);
             assertEquals(model.get("slope").asDouble(), R.getSlope(), 0.00000000000001);
+
+            try (ByteArrayInputStream serializedModel = new ByteArrayInputStream(model.get("serializedModel").asByteArray());
+                 ObjectInput in = new ObjectInputStream(serializedModel)){
+
+                SimpleRegression o = (SimpleRegression) in.readObject();
+                assertEquals(model.get("intercept").asDouble(), o.getIntercept(), 0.00000000000001);
+                assertEquals(model.get("slope").asDouble(), o.getSlope(), 0.00000000000001);
+
+            } catch (IOException e) {
+                fail("error in deserialization");
+            }
         }
     }
 }

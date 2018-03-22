@@ -2,6 +2,7 @@ package example;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.io.*;
 
 
 import org.neo4j.graphdb.*;
@@ -13,7 +14,7 @@ import org.apache.commons.math3.stat.regression.SimpleRegression;
 
 
 /** In this class I will create three implementations
- * of a linear regression model.
+ * of linear regression.
  *
  * 1. Create a user defined function in which the user manually inputs
  * the slope/intercept coefficients obtained through a third
@@ -21,12 +22,15 @@ import org.apache.commons.math3.stat.regression.SimpleRegression;
  * to predict unknown values.
  *
  * 2. Create a user defined procedure in which the user specifies which
- * node/relationship type and properties of that entity will be the independent and dependent values
+ * node/relationship type and properties of that entity will be the x and y values
  * of the regression. The procedure will then create a linear regression
  * model using all entities with known x and y values and map that model onto all entities
  * with known x but unknown y values, storing the predicted y value as another
- * property. The linear slope and intercept of the regression model will be stored as an isolated node so that
- * it can be later applied as more data is added to the graph.
+ * property. Store serialized model object in a new node.
+ *
+ * 3. Create a user defined procedure in which the user provides one query that will return entities with properties
+ * used to create the model, and another query that will return entities on which the model will predict unknown values.
+ * Store serialized model object in a new node.
  */
 
 public class LinearRegression {
@@ -72,6 +76,7 @@ public class LinearRegression {
 
         //gathers points with known indVar and depVar
         Result resultKnown;
+
         //gathers points with known indVar but no known depVar
         Result resultUnknown;
 
@@ -120,8 +125,20 @@ public class LinearRegression {
         parameters.put("int", R.getIntercept());
         parameters.put("slope", R.getSlope());
 
-        db.execute("CREATE (n:LinReg {label:$label, indVar:$indVar, depVar:$depVar, intercept:$int, slope:$slope})", parameters);
+        ResourceIterator<Entity> modelNode = db.execute("CREATE (n:LinReg {label:$label, indVar:$indVar, depVar:$depVar, " +
+                "intercept:$int, slope:$slope}) RETURN n", parameters).columnAs("n");
+        Entity n = modelNode.next();
 
+        //Serialize R and store as property "serializedModel" in the new LinReg node
+        try (ByteArrayOutputStream model = new ByteArrayOutputStream();
+            ObjectOutput out = new ObjectOutputStream(model)){
+            out.writeObject(R);
+            byte[] byteModel = model.toByteArray();
+            n.setProperty("serializedModel", byteModel);
+
+        } catch (IOException e) {
+
+        }
     }
 
     /* modelQuery must return a Result that contains a column titled indVar and a column titled depVar. This data will be used
@@ -184,8 +201,20 @@ public class LinearRegression {
         parameters.put("int", R.getIntercept());
         parameters.put("slope", R.getSlope());
 
-        db.execute("CREATE (:LinReg:Custom {indVar:$indVar, depVar:$depVar, intercept:$int, slope:$slope})", parameters);
+        ResourceIterator<Entity> modelNode = db.execute("CREATE (n:LinReg:Custom {indVar:$indVar, depVar:$depVar, " +
+                "intercept:$int, slope:$slope}) RETURN n", parameters).columnAs("n");
+        Entity n = modelNode.next();
 
+        //Serialize R and store as property "serializedModel" in the new LinReg node
+        try (ByteArrayOutputStream model = new ByteArrayOutputStream();
+             ObjectOutput out = new ObjectOutputStream(model)){
+            out.writeObject(R);
+            byte[] byteModel = model.toByteArray();
+            n.setProperty("serializedModel", byteModel);
+
+        } catch (IOException e) {
+
+        }
     }
 }
 
