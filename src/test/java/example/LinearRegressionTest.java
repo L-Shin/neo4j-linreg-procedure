@@ -165,7 +165,7 @@ public class LinearRegressionTest {
             parameters.put("modelQuery", modelQuery);
             parameters.put("mapQuery", mapQuery);
 
-            session.run("CALL example.customRegression($modelQuery, $mapQuery, 'time', 'progress', 'predictedProgress')", parameters);
+            session.run("CALL example.customRegression($modelQuery, $mapQuery, 'time', 'progress', 'predictedProgress', 1)", parameters);
 
             StatementResult result = session.run(gatherPredictedValues);
 
