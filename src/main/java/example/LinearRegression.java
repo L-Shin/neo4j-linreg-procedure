@@ -141,7 +141,7 @@ public class LinearRegression {
 
         }
     }
-
+    //separate function to clean up customRegression and updateRegression. Adds known values to the model R
     private void addValuesToModel(Result knownValues, SimpleRegression R, String indVar, String depVar) {
         if (!(knownValues.columns().contains(indVar)&&knownValues.columns().contains(depVar))) {
             throw new RuntimeException("model query returns data with invalid column titles-must match indVar and depVar");
@@ -154,6 +154,7 @@ public class LinearRegression {
             }
         }
     }
+    //separate function to clean up customRegression and updateRegression. Removes values from the model R
     private void removeValuesFromModel(Result toRemove, SimpleRegression R, String indVar, String depVar) {
         if (!(toRemove.columns().contains(indVar)&&toRemove.columns().contains(depVar))) {
             throw new RuntimeException("remove query returns columns with invalid column titles");
@@ -168,6 +169,7 @@ public class LinearRegression {
             }
         }
     }
+    //predicts and stores values using the model R
     private void setPredictedValues(ResourceIterator<Entity> unknowns, SimpleRegression R, String indVar, String depVar, String newVarName) {
         while(unknowns.hasNext()) {
             Entity e = unknowns.next();
@@ -177,13 +179,14 @@ public class LinearRegression {
 
         }
     }
+    //Serializes the object into a byte array for storage
     private byte[] convertToBytes(Object object) throws IOException {
         try (ByteArrayOutputStream bos = new ByteArrayOutputStream();
         ObjectOutput out = new ObjectOutputStream(bos)) {
             out.writeObject(object);
             return bos.toByteArray();
         }
-    }
+    }//de serializes the byte array and returns the stored object
     private Object convertFromBytes(byte[] bytes) throws IOException, ClassNotFoundException {
         try (ByteArrayInputStream bis = new ByteArrayInputStream(bytes);
         ObjectInput in = new ObjectInputStream(bis)) {
@@ -193,7 +196,8 @@ public class LinearRegression {
     /* modelQuery must return a Result that contains a column titled indVar and a column titled depVar. This data will be used
     to create the model. If nonempty, mapQuery must return a single column Result of type Entity (node or relationship). If entries in this
     column contain the property indVar and not the property depVar, the predicted depVar value will be stored under the property
-    named newVarName. Model will be serialized and stored in a node with optional modelID property
+    named newVarName. Model will be serialized and stored in a node with modelID property. MAKE SURE YOUR QUERIES DON'T CONTAIN
+    DUPLICATE VALUES OR THE MODEL WILL NOT BE CREATED CORRECTLY
      */
     @Procedure(value = "example.customRegression", mode = Mode.WRITE)
     @Description("Create a linear regression model using the the two data points which result from running the modelQuery." +

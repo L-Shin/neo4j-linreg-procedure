@@ -159,8 +159,8 @@ public class LinearRegressionTest {
             session.run(createUnknownRelationships);
 
 
-            String modelQuery = "MATCH () - [r:WORKS_FOR] - () WHERE exists(r.time) AND exists(r.progress) RETURN r.time as time, r.progress as progress";
-            String mapQuery = "MATCH () - [r:WORKS_FOR] - () WHERE exists(r.time) AND NOT exists(r.progress) RETURN r";
+            String modelQuery = "MATCH () - [r:WORKS_FOR] -> () WHERE exists(r.time) AND exists(r.progress) RETURN r.time as time, r.progress as progress";
+            String mapQuery = "MATCH () - [r:WORKS_FOR] -> () WHERE exists(r.time) AND NOT exists(r.progress) RETURN r";
             HashMap<String, Object> parameters = new HashMap<>();
             parameters.put("modelQuery", modelQuery);
             parameters.put("mapQuery", mapQuery);
@@ -205,6 +205,70 @@ public class LinearRegressionTest {
             } catch (IOException e) {
                 fail("error in deserialization");
             }
+
+
+        }
+    }
+    @Test
+    public void shouldUpdateModel() throws Throwable {
+        try (Driver driver = GraphDatabase.driver(neo4j.boltURI(), Config.build().withEncryptionLevel(Config.EncryptionLevel.NONE).toConfig())) {
+            Session session = driver.session();
+            session.run(createKnownRelationships);
+            session.run(createUnknownRelationships);
+
+            //create the initial model
+            String modelQuery = "MATCH () - [r:WORKS_FOR] -> () WHERE exists(r.time) AND exists(r.progress) RETURN r.time as time, r.progress as progress";
+            String mapQuery = "MATCH () - [r:WORKS_FOR] -> () WHERE exists(r.time) AND NOT exists(r.progress) RETURN r";
+            HashMap<String, Object> parameters = new HashMap<>();
+            parameters.put("modelQuery", modelQuery);
+            parameters.put("mapQuery", mapQuery);
+
+            session.run("CALL example.customRegression($modelQuery, $mapQuery, 'time', 'progress', 'predictedProgress', 1)", parameters);
+
+            //remove data from relationship between nodes 1 and 2
+            String removeQuery = "MATCH (:Node {id:1})-[r:WORKS_FOR]->(:Node {id:2}) RETURN r.time as time, r.progress as progress";
+            parameters.put("removeQuery", removeQuery);
+            session.run("CALL example.updateRegression($removeQuery, '', '', 'time', 'progress', 'predictedProgress', 1)", parameters);
+
+            //create a new relationship between nodes 7 and 8
+            session.run("MATCH (n7:Node {id:7}) MERGE (n7)-[:WORKS_FOR {time:6.0, progress:5.870}]->(:Node {id:8})", parameters);
+
+            //add data from new relationship to model
+            String updateQuery = "MATCH (:Node {id:7})-[r:WORKS_FOR]->(:Node {id:8}) RETURN r.time as time, r.progress as progress";
+            parameters.put("updateQuery", updateQuery);
+            session.run("CALL example.updateRegression('', $updateQuery, '', 'time', 'progress', 'predictedProgress', 1)", parameters);
+
+            //map new model on all relationships with unknown progress
+            session.run("CALL example.updateRegression('', '', $mapQuery, 'time', 'progress', 'predictedProgress', 1)", parameters);
+
+            //replicate the creation and updates of the model
+            SimpleRegression R = new SimpleRegression();
+            R.addData(1.0, 1.345);
+            R.addData(2.0, 2.596);
+            R.addData(3.0, 3.259);
+            R.removeData(1.0, 1.345);
+            R.addData(6.0, 5.870);
+
+            HashMap<Double, Double> expected = new HashMap<>();
+            expected.put(4.0, R.predict(4.0));
+            expected.put(5.0, R.predict(5.0));
+
+
+            //make sure predicted values are correct
+            StatementResult result = session.run(gatherPredictedValues);
+            while (result.hasNext()) {
+                Record actual = result.next();
+
+                double time = actual.get("time").asDouble();
+                double expectedPrediction = expected.get(time);
+                double actualPrediction = actual.get("predictedProgress").asDouble();
+
+                assertThat( actualPrediction, equalTo( expectedPrediction ) );
+
+
+            }
+
+
         }
     }
 }
