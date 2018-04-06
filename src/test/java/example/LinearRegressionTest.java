@@ -209,6 +209,10 @@ public class LinearRegressionTest {
 
         }
     }
+    /* This tests the three input queries for updateRegression. Clearly you would actually want to run all three of these in one
+    call to updateRegression so as to de serialize and serialize the model once rather than 3 times, but in the test I want to make
+    sure each functions correctly individually.
+     */
     @Test
     public void shouldUpdateModel() throws Throwable {
         try (Driver driver = GraphDatabase.driver(neo4j.boltURI(), Config.build().withEncryptionLevel(Config.EncryptionLevel.NONE).toConfig())) {

@@ -104,7 +104,7 @@ public class LinearRegression {
             Object y = curr.getProperty(depVar);
 
             if (x instanceof Number && y instanceof Number) {
-                R.addData((double) x, (double) y);
+                R.addData(((Number) x).doubleValue(), ((Number) y).doubleValue());
             }
 
         }
@@ -120,7 +120,7 @@ public class LinearRegression {
             Object x = curr.getProperty(indVar);
 
             if (x instanceof Number) {
-                curr.setProperty(newVarName, R.predict((double) x));
+                curr.setProperty(newVarName, R.predict(((Number) x).doubleValue()));
             }
         }
         parameters.put("int", R.getIntercept());
@@ -150,7 +150,7 @@ public class LinearRegression {
             Map<String, Object> row = knownValues.next();
             Object x = row.get(indVar); Object y = row.get(depVar);
             if (x instanceof Number && y instanceof Number) {
-                R.addData((double) x, (double) y);
+                R.addData(((Number) x).doubleValue(), ((Number) y).doubleValue());
             }
         }
     }
@@ -165,7 +165,7 @@ public class LinearRegression {
             Object x = row.get(indVar);
             Object y = row.get(depVar);
             if (x instanceof Number && y instanceof Number) {
-                R.removeData((double) x, (double) y);
+                R.removeData(((Number) x).doubleValue(), ((Number) y).doubleValue());
             }
         }
     }
@@ -174,7 +174,7 @@ public class LinearRegression {
         while(unknowns.hasNext()) {
             Entity e = unknowns.next();
             if (e.hasProperty(indVar) && !e.hasProperty(depVar) && e.getProperty(indVar) instanceof Number) {
-                e.setProperty(newVarName, R.predict((double) e.getProperty(indVar)));
+                e.setProperty(newVarName, R.predict(((Number) e.getProperty(indVar)).doubleValue()));
             }
 
         }
