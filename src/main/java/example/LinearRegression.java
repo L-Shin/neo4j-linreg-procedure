@@ -3,6 +3,7 @@ package example;
 import java.util.HashMap;
 import java.util.Map;
 import java.io.*;
+import java.util.List;
 
 
 import org.neo4j.cypher.internal.frontend.v2_3.ast.functions.Str;
@@ -125,8 +126,8 @@ public class LinearRegression {
         }
         parameters.put("int", R.getIntercept());
         parameters.put("slope", R.getSlope());
-
-        ResourceIterator<Entity> modelNode = db.execute("CREATE (n:LinReg {label:$label, indVar:$indVar, depVar:$depVar, " +
+        parameters.put("R2", R.getRSquare());
+        ResourceIterator<Entity> modelNode = db.execute("CREATE (n:LinReg {label:$label, indVar:$indVar, depVar:$depVar, rSquare:$R2, " +
                 "intercept:$int, slope:$slope}) RETURN n", parameters).columnAs("n");
         Entity n = modelNode.next();
 
@@ -142,10 +143,10 @@ public class LinearRegression {
         }
     }
     //separate function to clean up customRegression and updateRegression. Adds known values to the model R
-    private void addValuesToModel(Result knownValues, SimpleRegression R, String indVar, String depVar) {
-        if (!(knownValues.columns().contains(indVar)&&knownValues.columns().contains(depVar))) {
-            throw new RuntimeException("model query returns data with invalid column titles-must match indVar and depVar");
-        }
+    private void addValuesToModel(Result knownValues, SimpleRegression R) {
+        List<String> columns = knownValues.columns();
+        String indVar = columns.get(0);
+        String depVar = columns.get(1);
         while(knownValues.hasNext()) {
             Map<String, Object> row = knownValues.next();
             Object x = row.get(indVar); Object y = row.get(depVar);
@@ -155,10 +156,9 @@ public class LinearRegression {
         }
     }
     //separate function to clean up customRegression and updateRegression. Removes values from the model R
-    private void removeValuesFromModel(Result toRemove, SimpleRegression R, String indVar, String depVar) {
-        if (!(toRemove.columns().contains(indVar)&&toRemove.columns().contains(depVar))) {
-            throw new RuntimeException("remove query returns columns with invalid column titles");
-        }
+    private void removeValuesFromModel(Result toRemove, SimpleRegression R) {
+        String indVar = toRemove.columns().get(0);
+        String depVar = toRemove.columns().get(1);
         Map<String, Object> row;
         while (toRemove.hasNext()) {
             row = toRemove.next();
@@ -170,12 +170,15 @@ public class LinearRegression {
         }
     }
     //predicts and stores values using the model R
-    private void setPredictedValues(ResourceIterator<Entity> unknowns, SimpleRegression R, String indVar, String depVar, String newVarName) {
-        while(unknowns.hasNext()) {
-            Entity e = unknowns.next();
-            if (e.hasProperty(indVar) && !e.hasProperty(depVar) && e.getProperty(indVar) instanceof Number) {
-                e.setProperty(newVarName, R.predict(((Number) e.getProperty(indVar)).doubleValue()));
-            }
+    private void setPredictedValues(Result r, SimpleRegression R, String newVarName) {
+        String entity = r.columns().get(0);
+        String indVar = r.columns().get(1);
+        Map<String, Object> row;
+        while(r.hasNext()) {
+            row = r.next();
+            Entity e = (Entity) row.get(entity);
+            double x = ((Number) row.get(indVar)).doubleValue();
+            e.setProperty(newVarName, R.predict(x));
 
         }
     }
@@ -193,17 +196,16 @@ public class LinearRegression {
             return in.readObject();
         }
     }
-    /* modelQuery must return a Result that contains a column titled indVar and a column titled depVar. This data will be used
-    to create the model. If nonempty, mapQuery must return a single column Result of type Entity (node or relationship). If entries in this
-    column contain the property indVar and not the property depVar, the predicted depVar value will be stored under the property
-    named newVarName. Model will be serialized and stored in a node with modelID property. MAKE SURE YOUR QUERIES DON'T CONTAIN
+    /* modelQuery must return a Result with first column indVar and second column depVar. This data will be used
+    to create the model. If nonempty, mapQuery must return a two column Result with first column of type Entity (node or relationship)
+    and second column if indVars. The predicted depVar value will be stored under the property named newVarName.
+    Model will be serialized and stored in a node with modelID property. MAKE SURE YOUR QUERIES DON'T CONTAIN
     DUPLICATE VALUES OR THE MODEL WILL NOT BE CREATED CORRECTLY
      */
     @Procedure(value = "example.customRegression", mode = Mode.WRITE)
     @Description("Create a linear regression model using the the two data points which result from running the modelQuery." +
             " Then store predicted values on the Entities that result from running the mapQuery.")
     public void customRegression(@Name("model query") String modelQuery, @Name("map query") String mapQuery,
-                                 @Name("independent variable") String indVar, @Name("dependent variable") String depVar,
                                  @Name("new variable name") String newVarName, @Name("model ID") long modelID) {
 
         Result knownValues;
@@ -218,19 +220,18 @@ public class LinearRegression {
 
         SimpleRegression R = new SimpleRegression();
 
-        addValuesToModel(knownValues, R, indVar, depVar);
+        addValuesToModel(knownValues, R);
 
         if (R.getN() < 2) {
             throw new RuntimeException("not enough data to create a model");
         }
         //store the model in a new LinReg node
         Map<String, Object> parameters = new HashMap<>();
-        parameters.put("indVar", indVar); parameters.put("depVar", depVar);
         parameters.put("int", R.getIntercept()); parameters.put("slope", R.getSlope());
-        parameters.put("modelID", modelID);
+        parameters.put("modelID", modelID); parameters.put("rSquare", R.getRSquare());
 
-        ResourceIterator<Entity> modelNode = db.execute("CREATE (n:LinReg:Custom {indVar:$indVar, depVar:$depVar, " +
-                "intercept:$int, slope:$slope, ID:$modelID}) RETURN n", parameters).columnAs("n");
+        ResourceIterator<Entity> modelNode = db.execute("CREATE (n:LinReg:Custom {intercept:$int, slope:$slope, " +
+                "ID:$modelID, rSquare:$rSquare}) RETURN n", parameters).columnAs("n");
         Entity n = modelNode.next();
 
         //Serialize R and store as property "serializedModel" in the new LinReg node
@@ -249,9 +250,7 @@ public class LinearRegression {
         try
         {
             r = db.execute(mapQuery);
-            columnTitle = r.columns().get(0);
-            ResourceIterator<Entity> unknowns = r.columnAs(columnTitle);
-            setPredictedValues(unknowns, R, indVar, depVar, newVarName);
+            setPredictedValues(r, R, newVarName);
         }
         catch (Exception q)
         {
@@ -268,16 +267,15 @@ public class LinearRegression {
     @Description("Update the linear regression model stored in the LinReg node with ID modelID by removing data, adding" +
             " data, and mapping updated predictions as specified by the provided queries.")
     public void updateRegression(@Name("remove query") String removeQuery, @Name("add query") String addQuery, @Name("map query") String mapQuery,
-                                 @Name("independent variable") String indVar, @Name("dependent variable") String depVar,
                                  @Name("new variable name") String newVarName, @Name("existing model ID") long modelID) {
         Map<String, Object> parameters = new HashMap<>();
-        parameters.put("indVar", indVar); parameters.put("depVar", depVar); parameters.put("ID", modelID);
+        parameters.put("ID", modelID);
 
         SimpleRegression R;
         Entity modelNode;
         //retrieve and deserialize the model
         try {
-            ResourceIterator<Entity> n = db.execute("MATCH (n:LinReg {indVar:$indVar, depVar:$depVar, ID:$ID}) RETURN " +
+            ResourceIterator<Entity> n = db.execute("MATCH (n:LinReg {ID:$ID}) RETURN " +
                     "n", parameters).columnAs("n");
             modelNode = n.next();
             byte[] model = (byte[]) modelNode.getProperty("serializedModel");
@@ -291,7 +289,7 @@ public class LinearRegression {
             Result toRemove;
             try {
                 toRemove = db.execute(removeQuery);
-                removeValuesFromModel(toRemove, R, indVar, depVar);
+                removeValuesFromModel(toRemove, R);
             } catch (QueryExecutionException e) {
                 throw new RuntimeException("invalid removeQuery");
             }
@@ -304,7 +302,7 @@ public class LinearRegression {
             } catch (QueryExecutionException e) {
                 throw new RuntimeException("invalid addQuery");
             }
-            addValuesToModel(toAdd, R, indVar, depVar);
+            addValuesToModel(toAdd, R);
 
         }
         if (R.getN() < 2) {
@@ -316,12 +314,10 @@ public class LinearRegression {
             String columnTitle;
             try {
                 toMap = db.execute(mapQuery);
-                columnTitle = toMap.columns().get(0);
             } catch (Exception e) {
                 throw new RuntimeException("invalid mapQuery");
             }
-            ResourceIterator<Entity> unknowns = toMap.columnAs(columnTitle);
-            setPredictedValues(unknowns, R, indVar, depVar, newVarName);
+            setPredictedValues(toMap, R, newVarName);
         }
 
         try {
