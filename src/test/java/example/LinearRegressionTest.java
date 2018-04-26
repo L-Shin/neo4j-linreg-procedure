@@ -27,8 +27,8 @@ public class LinearRegressionTest {
     public void shouldPredictValues() throws Throwable {
 
         // Create a driver session, and run Cypher query
-        try (Driver driver = GraphDatabase.driver(neo4j.boltURI(), Config.build().withEncryptionLevel(Config.EncryptionLevel.NONE).toConfig())) {
-            Session session = driver.session();
+        try (Driver driver = GraphDatabase.driver(neo4j.boltURI(), Config.build().withoutEncryption().toConfig());
+             Session session = driver.session()) {
 
             Double result = session
                     .run("RETURN example.predict(3.9, 0.453, 2) AS result")
@@ -41,9 +41,8 @@ public class LinearRegressionTest {
 
     @Test
     public void shouldCreateNodeRegression() throws Throwable {
-        try (Driver driver = GraphDatabase.driver(neo4j.boltURI(), Config.build().withEncryptionLevel(Config.EncryptionLevel.NONE).toConfig())) {
-            Session session = driver.session();
-
+        try (Driver driver = GraphDatabase.driver(neo4j.boltURI(), Config.build().withoutEncryption().toConfig());
+             Session session = driver.session()) {
 
             session.run("CREATE (:node {time:1.0, progress:1.345}), (:node {time:2.0, progress:2.596}), " +
                     "(:node {time:3.0, progress:3.259}), (:node {time:4.0}), (:node {time:5.0})");
@@ -103,8 +102,8 @@ public class LinearRegressionTest {
             "exists(r.predictedProgress) RETURN r.time as time, r.predictedProgress as predictedProgress";
     @Test
     public void shouldCreateRelRegression() throws Throwable {
-        try (Driver driver = GraphDatabase.driver(neo4j.boltURI(), Config.build().withEncryptionLevel(Config.EncryptionLevel.NONE).toConfig())) {
-            Session session = driver.session();
+        try (Driver driver = GraphDatabase.driver(neo4j.boltURI(), Config.build().withoutEncryption().toConfig());
+             Session session = driver.session()) {
 
             session.run(createKnownRelationships);
             session.run(createUnknownRelationships);
@@ -153,8 +152,8 @@ public class LinearRegressionTest {
 
     @Test
     public void shouldCreateCustomRegression() throws Throwable {
-        try (Driver driver = GraphDatabase.driver(neo4j.boltURI(), Config.build().withEncryptionLevel(Config.EncryptionLevel.NONE).toConfig())) {
-            Session session = driver.session();
+        try (Driver driver = GraphDatabase.driver(neo4j.boltURI(), Config.build().withoutEncryption().toConfig());
+             Session session = driver.session()) {
             session.run(createKnownRelationships);
             session.run(createUnknownRelationships);
 
@@ -215,8 +214,8 @@ public class LinearRegressionTest {
      */
     @Test
     public void shouldUpdateModel() throws Throwable {
-        try (Driver driver = GraphDatabase.driver(neo4j.boltURI(), Config.build().withEncryptionLevel(Config.EncryptionLevel.NONE).toConfig())) {
-            Session session = driver.session();
+        try (Driver driver = GraphDatabase.driver(neo4j.boltURI(), Config.build().withoutEncryption().toConfig());
+             Session session = driver.session()) {
             session.run(createKnownRelationships);
             session.run(createUnknownRelationships);
 

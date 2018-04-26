@@ -6,7 +6,6 @@ import java.io.*;
 import java.util.List;
 
 
-import org.neo4j.cypher.internal.frontend.v2_3.ast.functions.Str;
 import org.neo4j.graphdb.*;
 import org.neo4j.logging.Log;
 import org.neo4j.procedure.*;
@@ -16,15 +15,15 @@ import org.apache.commons.math3.stat.regression.SimpleRegression;
 
 
 /** In this class I will create three implementations
- * of linear regression.
+ * of linear regression and one update procedure.
  *
  * 1. Create a user defined function in which the user manually inputs
- * the slope/intercept coefficients obtained through a third
+ * the slope/intercept parameters obtained through a third
  * party data analysis tool, and then calls this function on the graph
  * to predict unknown values.
  *
- * 2. Create a user defined procedure in which the user specifies which
- * node/relationship type and properties of that entity will be the x and y values
+ * 2. Create a user defined procedure in which the user specifies
+ * node/relationship type the properties of that entity that will be the x and y values
  * of the regression. The procedure will then create a linear regression
  * model using all entities with known x and y values and map that model onto all entities
  * with known x but unknown y values, storing the predicted y value as another
@@ -33,13 +32,17 @@ import org.apache.commons.math3.stat.regression.SimpleRegression;
  * 3. Create a user defined procedure in which the user provides one query that will return entities with properties
  * used to create the model, and another query that will return entities on which the model will predict unknown values.
  * Store serialized model object in a new node.
+ *
+ * 4. User defined procedure in which the user provides three queries: one provides data to remove from existing model,
+ * one provides data to add to existing model, and one provides entities on which the model should provide updated
+ * values. Existing model de-serialized, updated, and re-serialized to be stored on same LinReg node.
  */
 
 public class LinearRegression {
 
 
     @UserFunction
-    @Description("example.predict(b, m, x) - uses the regression parameters intercept = b, coefficient = m, " +
+    @Description("example.predict(b, m, x) - uses the regression parameters intercept = b, slope = m, " +
             "and returns a predicted y value based on the equation y = m * x + b")
     public Double predict(@Name("intercept") Double intercept, @Name("slope") Double slope, @Name("input")
             Double input) {
@@ -61,8 +64,7 @@ public class LinearRegression {
     @Description("create a linear regression model using independent and dependent property data from nodes/relationships that have" +
             " the given label and contain both properties. Then store predicted values under the property name " +
             "'newVarName' for nodes/relationships with the same label and known x but no known y property value. " +
-            "Store the linear regression coefficients in a new LinReg node. Use of nodes vs relationships specified with dataSource")
-
+            "Store the linear regression model in a new LinReg node. Use of nodes vs relationships specified with dataSource")
     public void simpleRegression(@Name("label") String label, @Name("independent variable") String indVar,
                                  @Name("dependent variable") String depVar, @Name("new variable name") String newVarName,
                                  @Name("data source") String dataSource) {
@@ -142,6 +144,7 @@ public class LinearRegression {
 
         }
     }
+
     //separate function to clean up customRegression and updateRegression. Adds known values to the model R
     private void addValuesToModel(Result knownValues, SimpleRegression R) {
         List<String> columns = knownValues.columns();
@@ -155,6 +158,7 @@ public class LinearRegression {
             }
         }
     }
+
     //separate function to clean up customRegression and updateRegression. Removes values from the model R
     private void removeValuesFromModel(Result toRemove, SimpleRegression R) {
         String indVar = toRemove.columns().get(0);
@@ -169,6 +173,7 @@ public class LinearRegression {
             }
         }
     }
+
     //predicts and stores values using the model R
     private void setPredictedValues(Result r, SimpleRegression R, String newVarName) {
         String entity = r.columns().get(0);
@@ -182,6 +187,7 @@ public class LinearRegression {
 
         }
     }
+
     //Serializes the object into a byte array for storage
     private byte[] convertToBytes(Object object) throws IOException {
         try (ByteArrayOutputStream bos = new ByteArrayOutputStream();
@@ -189,13 +195,16 @@ public class LinearRegression {
             out.writeObject(object);
             return bos.toByteArray();
         }
-    }//de serializes the byte array and returns the stored object
+    }
+
+    //de serializes the byte array and returns the stored object
     private Object convertFromBytes(byte[] bytes) throws IOException, ClassNotFoundException {
         try (ByteArrayInputStream bis = new ByteArrayInputStream(bytes);
         ObjectInput in = new ObjectInputStream(bis)) {
             return in.readObject();
         }
     }
+
     /* modelQuery must return a Result with first column indVar and second column depVar. This data will be used
     to create the model. If nonempty, mapQuery must return a two column Result with first column of type Entity (node or relationship)
     and second column if indVars. The predicted depVar value will be stored under the property named newVarName.
@@ -329,10 +338,7 @@ public class LinearRegression {
         }
         modelNode.setProperty("intercept", R.getIntercept());
         modelNode.setProperty("slope", R.getSlope());
-
-
-
-
+        modelNode.setProperty("rSquare", R.getRSquare());
 
     }
 }
